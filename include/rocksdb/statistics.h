@@ -292,6 +292,8 @@ enum Tickers : uint32_t {
   BLOB_DB_FIFO_NUM_KEYS_EVICTED,
   // # of bytes in the blob files evicted because of BlobDB is full.
   BLOB_DB_FIFO_BYTES_EVICTED,
+  // # of times compactions gets disabled.
+  COMPACTION_DISABLED_COUNT,
 
   TICKER_ENUM_MAX
 };
@@ -430,6 +432,7 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {BLOB_DB_FIFO_NUM_FILES_EVICTED, "rocksdb.blobdb.fifo.num.files.evicted"},
     {BLOB_DB_FIFO_NUM_KEYS_EVICTED, "rocksdb.blobdb.fifo.num.keys.evicted"},
     {BLOB_DB_FIFO_BYTES_EVICTED, "rocksdb.blobdb.fifo.bytes.evicted"},
+    {COMPACTION_DISABLED_COUNT, "rocksdb.compaction.disabled.count"},
 };
 
 /**
