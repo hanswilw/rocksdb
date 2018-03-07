@@ -2528,6 +2528,8 @@ class TickerTypeJni {
         return 0x5D;
       case rocksdb::Tickers::TICKER_ENUM_MAX:
         return 0x5E;
+      case rocksdb::Tickets::COMPACTION_DISABLED_COUNT:
+        return 0x5F;
 
       default:
         // undefined/default
@@ -2729,6 +2731,8 @@ class TickerTypeJni {
         return rocksdb::Tickers::NUMBER_ITER_SKIP;
       case 0x5E:
         return rocksdb::Tickers::TICKER_ENUM_MAX;
+      case 0x5F:
+        return rocksdb::Tickets::COMPACTION_DISABLED_COUNT;
 
       default:
         // undefined/default

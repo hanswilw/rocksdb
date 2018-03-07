@@ -46,7 +46,7 @@ struct GenericRateLimiter::Req {
 GenericRateLimiter::GenericRateLimiter(int64_t rate_bytes_per_sec,
                                        int64_t refill_period_us,
                                        int32_t fairness, RateLimiter::Mode mode,
-                                       Env* env, bool auto_tuned)
+                                       Env* env, bool auto_tuned, bool optimize_writes)
     : RateLimiter(mode),
       refill_period_us_(refill_period_us),
       rate_bytes_per_sec_(auto_tuned ? rate_bytes_per_sec / 2
@@ -63,6 +63,7 @@ GenericRateLimiter::GenericRateLimiter(int64_t rate_bytes_per_sec,
       rnd_((uint32_t)time(nullptr)),
       leader_(nullptr),
       auto_tuned_(auto_tuned),
+      optimize_writes_(optimize_writes),
       num_drains_(0),
       prev_num_drains_(0),
       max_bytes_per_sec_(rate_bytes_per_sec),
@@ -113,6 +114,10 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
         kRefillsPerTune * std::chrono::microseconds(refill_period_us_)) {
       Tune();
     }
+  }
+
+  if (optimize_writes_) {
+    RecordTick(stats, COMPACTION_DISABLED_COUNT);
   }
 
   if (stop_) {
@@ -328,12 +333,13 @@ RateLimiter* NewGenericRateLimiter(
     int64_t rate_bytes_per_sec, int64_t refill_period_us /* = 100 * 1000 */,
     int32_t fairness /* = 10 */,
     RateLimiter::Mode mode /* = RateLimiter::Mode::kWritesOnly */,
-    bool auto_tuned /* = false */) {
+    bool auto_tuned /* = false */,
+    bool optimize_writes /* =false */) {
   assert(rate_bytes_per_sec > 0);
   assert(refill_period_us > 0);
   assert(fairness > 0);
   return new GenericRateLimiter(rate_bytes_per_sec, refill_period_us, fairness,
-                                mode, Env::Default(), auto_tuned);
+                                mode, Env::Default(), auto_tuned, optimize_writes);
 }
 
 }  // namespace rocksdb
