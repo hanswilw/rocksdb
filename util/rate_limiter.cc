@@ -107,6 +107,11 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
                            &rate_bytes_per_sec_);
   MutexLock g(&request_mutex_);
 
+  RecordTick(stats, COMPACTION_DISABLED_COUNT);
+  if (optimize_writes_) {
+    RecordTick(stats, COMPACTION_DISABLED_COUNT);
+  }
+
   if (auto_tuned_) {
     static const int kRefillsPerTune = 100;
     std::chrono::microseconds now(NowMicrosMonotonic(env_));
@@ -114,10 +119,6 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
         kRefillsPerTune * std::chrono::microseconds(refill_period_us_)) {
       Tune();
     }
-  }
-
-  if (optimize_writes_) {
-    RecordTick(stats, COMPACTION_DISABLED_COUNT);
   }
 
   if (stop_) {
