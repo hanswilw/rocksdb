@@ -70,6 +70,7 @@ class GenericRateLimiter : public RateLimiter {
   void Refill();
   int64_t CalculateRefillBytesPerPeriod(int64_t rate_bytes_per_sec);
   Status Tune();
+  Status TuneCompaction(Statistics* stats);
 
   uint64_t NowMicrosMonotonic(Env* env) {
     return env->NowNanos() / std::milli::den;

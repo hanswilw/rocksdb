@@ -376,6 +376,14 @@ class Env {
   virtual Status GetAbsolutePath(const std::string& db_path,
       std::string* output_path) = 0;
 
+  bool disable_auto_compactions = false;
+  void SetDisableAutoCompactions(bool new_val) {
+    disable_auto_compactions = new_val;
+  };
+  bool GetDisableAutoCompactions() const {
+    return disable_auto_compactions;
+  }
+
   // The number of background worker threads of a specific thread pool
   // for this environment. 'LOW' is the default pool.
   // default number: 1

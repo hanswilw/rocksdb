@@ -13,6 +13,7 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
+#include <iostream>
 #include <inttypes.h>
 #include <vector>
 #include <string>
@@ -358,7 +359,7 @@ ColumnFamilyData::ColumnFamilyData(
     uint32_t id, const std::string& name, Version* _dummy_versions,
     Cache* _table_cache, WriteBufferManager* write_buffer_manager,
     const ColumnFamilyOptions& cf_options, const ImmutableDBOptions& db_options,
-    const EnvOptions& env_options, ColumnFamilySet* column_family_set)
+    const EnvOptions& env_options, ColumnFamilySet* column_family_set, Env* env)
     : id_(id),
       name_(name),
       dummy_versions_(_dummy_versions),
@@ -383,6 +384,7 @@ ColumnFamilyData::ColumnFamilyData(
       prev_(nullptr),
       log_number_(0),
       column_family_set_(column_family_set),
+      env_(env),
       pending_flush_(false),
       pending_compaction_(false),
       prev_compaction_needed_bytes_(0),
@@ -632,10 +634,15 @@ int GetL0ThresholdSpeedupCompaction(int level0_file_num_compaction_trigger,
 }
 }  // namespace
 
-WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
-      const MutableCFOptions& mutable_cf_options) {
+WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(MutableCFOptions& mutable_cf_options) {
   auto write_stall_condition = WriteStallCondition::kNormal;
   if (current_ != nullptr) {
+    std::cout << "\nCALCULATE\n";
+    std::cout << std::to_string(mutable_cf_options.disable_auto_compactions);
+    std::cout << std::to_string(mutable_cf_options_.disable_auto_compactions);
+    std::cout << std::to_string(env_->GetDisableAutoCompactions());
+    mutable_cf_options.disable_auto_compactions = env_->GetDisableAutoCompactions();
+    std::cout << "\nEND\n";
     auto* vstorage = current_->storage_info();
     auto write_controller = column_family_set_->write_controller_;
     uint64_t compaction_needed_bytes =
@@ -654,7 +661,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
           "(waiting for flush), max_write_buffer_number is set to %d",
           name_.c_str(), imm()->NumNotFlushed(),
           mutable_cf_options.max_write_buffer_number);
-    } else if (!mutable_cf_options.disable_auto_compactions &&
+    } else if (!env_->GetDisableAutoCompactions() &&
                vstorage->l0_delay_trigger_count() >=
                    mutable_cf_options.level0_stop_writes_trigger) {
       write_controller_token_ = write_controller->GetStopToken();
@@ -667,7 +674,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
       ROCKS_LOG_WARN(ioptions_.info_log,
                      "[%s] Stopping writes because we have %d level-0 files",
                      name_.c_str(), vstorage->l0_delay_trigger_count());
-    } else if (!mutable_cf_options.disable_auto_compactions &&
+    } else if (!env_->GetDisableAutoCompactions() &&
                mutable_cf_options.hard_pending_compaction_bytes_limit > 0 &&
                compaction_needed_bytes >=
                    mutable_cf_options.hard_pending_compaction_bytes_limit) {
@@ -686,7 +693,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
       write_controller_token_ =
           SetupDelay(write_controller, compaction_needed_bytes,
                      prev_compaction_needed_bytes_, was_stopped,
-                     mutable_cf_options.disable_auto_compactions);
+                     env_->GetDisableAutoCompactions());
       internal_stats_->AddCFStats(InternalStats::MEMTABLE_LIMIT_SLOWDOWNS, 1);
       write_stall_condition = WriteStallCondition::kDelayed;
       ROCKS_LOG_WARN(
@@ -697,7 +704,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
           name_.c_str(), imm()->NumNotFlushed(),
           mutable_cf_options.max_write_buffer_number,
           write_controller->delayed_write_rate());
-    } else if (!mutable_cf_options.disable_auto_compactions &&
+    } else if (!env_->GetDisableAutoCompactions() &&
                mutable_cf_options.level0_slowdown_writes_trigger >= 0 &&
                vstorage->l0_delay_trigger_count() >=
                    mutable_cf_options.level0_slowdown_writes_trigger) {
@@ -707,7 +714,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
       write_controller_token_ =
           SetupDelay(write_controller, compaction_needed_bytes,
                      prev_compaction_needed_bytes_, was_stopped || near_stop,
-                     mutable_cf_options.disable_auto_compactions);
+                     env_->GetDisableAutoCompactions());
       internal_stats_->AddCFStats(InternalStats::L0_FILE_COUNT_LIMIT_SLOWDOWNS,
                                   1);
       write_stall_condition = WriteStallCondition::kDelayed;
@@ -720,7 +727,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
                      "rate %" PRIu64,
                      name_.c_str(), vstorage->l0_delay_trigger_count(),
                      write_controller->delayed_write_rate());
-    } else if (!mutable_cf_options.disable_auto_compactions &&
+    } else if (!env_->GetDisableAutoCompactions() &&
                mutable_cf_options.soft_pending_compaction_bytes_limit > 0 &&
                vstorage->estimated_compaction_needed_bytes() >=
                    mutable_cf_options.soft_pending_compaction_bytes_limit) {
@@ -738,7 +745,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
       write_controller_token_ =
           SetupDelay(write_controller, compaction_needed_bytes,
                      prev_compaction_needed_bytes_, was_stopped || near_stop,
-                     mutable_cf_options.disable_auto_compactions);
+                     env_->GetDisableAutoCompactions());
       internal_stats_->AddCFStats(
           InternalStats::PENDING_COMPACTION_BYTES_LIMIT_SLOWDOWNS, 1);
       write_stall_condition = WriteStallCondition::kDelayed;
@@ -1049,7 +1056,7 @@ ColumnFamilySet::ColumnFamilySet(const std::string& dbname,
     : max_column_family_(0),
       dummy_cfd_(new ColumnFamilyData(0, "", nullptr, nullptr, nullptr,
                                       ColumnFamilyOptions(), *db_options,
-                                      env_options, nullptr)),
+                                      env_options, nullptr, nullptr)),
       default_cfd_cache_(nullptr),
       db_name_(dbname),
       db_options_(db_options),
@@ -1120,7 +1127,7 @@ ColumnFamilyData* ColumnFamilySet::CreateColumnFamily(
   assert(column_families_.find(name) == column_families_.end());
   ColumnFamilyData* new_cfd = new ColumnFamilyData(
       id, name, dummy_versions, table_cache_, write_buffer_manager_, options,
-      *db_options_, env_options_, this);
+      *db_options_, env_options_, this, Env::Default());
   column_families_.insert({name, id});
   column_family_data_.insert({id, new_cfd});
   max_column_family_ = std::max(max_column_family_, id);
