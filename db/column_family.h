@@ -336,8 +336,7 @@ class ColumnFamilyData {
   // recalculation of compaction score. These values are used in
   // DBImpl::MakeRoomForWrite function to decide, if it need to make
   // a write stall
-  WriteStallCondition RecalculateWriteStallConditions(
-      const MutableCFOptions& mutable_cf_options);
+  WriteStallCondition RecalculateWriteStallConditions();
 
   void set_initialized() { initialized_.store(true); }
 

@@ -436,9 +436,13 @@ ColumnFamilyData::ColumnFamilyData(
       ROCKS_LOG_INFO(ioptions_.info_log, "\t(skipping printing options)\n");
     }
   }
+  if (env_) {
+    env_->SetDisableAutoCompactions(mutable_cf_options_.disable_auto_compactions);
+  }
 
-  RecalculateWriteStallConditions(mutable_cf_options_);
+  RecalculateWriteStallConditions();
 }
+
 
 // DB mutex held
 ColumnFamilyData::~ColumnFamilyData() {
@@ -634,14 +638,14 @@ int GetL0ThresholdSpeedupCompaction(int level0_file_num_compaction_trigger,
 }
 }  // namespace
 
-WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(MutableCFOptions& mutable_cf_options) {
+WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions() {
   auto write_stall_condition = WriteStallCondition::kNormal;
   if (current_ != nullptr) {
     std::cout << "\nCALCULATE\n";
-    std::cout << std::to_string(mutable_cf_options.disable_auto_compactions);
     std::cout << std::to_string(mutable_cf_options_.disable_auto_compactions);
     std::cout << std::to_string(env_->GetDisableAutoCompactions());
-    mutable_cf_options.disable_auto_compactions = env_->GetDisableAutoCompactions();
+    mutable_cf_options_.disable_auto_compactions = env_->GetDisableAutoCompactions();
+    const MutableCFOptions& mutable_cf_options = mutable_cf_options_;
     std::cout << "\nEND\n";
     auto* vstorage = current_->storage_info();
     auto write_controller = column_family_set_->write_controller_;
@@ -661,7 +665,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(MutableCFO
           "(waiting for flush), max_write_buffer_number is set to %d",
           name_.c_str(), imm()->NumNotFlushed(),
           mutable_cf_options.max_write_buffer_number);
-    } else if (!env_->GetDisableAutoCompactions() &&
+    } else if (!mutable_cf_options.disable_auto_compactions &&
                vstorage->l0_delay_trigger_count() >=
                    mutable_cf_options.level0_stop_writes_trigger) {
       write_controller_token_ = write_controller->GetStopToken();
@@ -674,7 +678,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(MutableCFO
       ROCKS_LOG_WARN(ioptions_.info_log,
                      "[%s] Stopping writes because we have %d level-0 files",
                      name_.c_str(), vstorage->l0_delay_trigger_count());
-    } else if (!env_->GetDisableAutoCompactions() &&
+    } else if (!mutable_cf_options.disable_auto_compactions &&
                mutable_cf_options.hard_pending_compaction_bytes_limit > 0 &&
                compaction_needed_bytes >=
                    mutable_cf_options.hard_pending_compaction_bytes_limit) {
@@ -693,7 +697,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(MutableCFO
       write_controller_token_ =
           SetupDelay(write_controller, compaction_needed_bytes,
                      prev_compaction_needed_bytes_, was_stopped,
-                     env_->GetDisableAutoCompactions());
+                     mutable_cf_options.disable_auto_compactions);
       internal_stats_->AddCFStats(InternalStats::MEMTABLE_LIMIT_SLOWDOWNS, 1);
       write_stall_condition = WriteStallCondition::kDelayed;
       ROCKS_LOG_WARN(
@@ -704,7 +708,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(MutableCFO
           name_.c_str(), imm()->NumNotFlushed(),
           mutable_cf_options.max_write_buffer_number,
           write_controller->delayed_write_rate());
-    } else if (!env_->GetDisableAutoCompactions() &&
+    } else if (!mutable_cf_options.disable_auto_compactions &&
                mutable_cf_options.level0_slowdown_writes_trigger >= 0 &&
                vstorage->l0_delay_trigger_count() >=
                    mutable_cf_options.level0_slowdown_writes_trigger) {
@@ -714,7 +718,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(MutableCFO
       write_controller_token_ =
           SetupDelay(write_controller, compaction_needed_bytes,
                      prev_compaction_needed_bytes_, was_stopped || near_stop,
-                     env_->GetDisableAutoCompactions());
+                     mutable_cf_options.disable_auto_compactions);
       internal_stats_->AddCFStats(InternalStats::L0_FILE_COUNT_LIMIT_SLOWDOWNS,
                                   1);
       write_stall_condition = WriteStallCondition::kDelayed;
@@ -727,7 +731,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(MutableCFO
                      "rate %" PRIu64,
                      name_.c_str(), vstorage->l0_delay_trigger_count(),
                      write_controller->delayed_write_rate());
-    } else if (!env_->GetDisableAutoCompactions() &&
+    } else if (!mutable_cf_options.disable_auto_compactions &&
                mutable_cf_options.soft_pending_compaction_bytes_limit > 0 &&
                vstorage->estimated_compaction_needed_bytes() >=
                    mutable_cf_options.soft_pending_compaction_bytes_limit) {
@@ -745,7 +749,7 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(MutableCFO
       write_controller_token_ =
           SetupDelay(write_controller, compaction_needed_bytes,
                      prev_compaction_needed_bytes_, was_stopped || near_stop,
-                     env_->GetDisableAutoCompactions());
+                     mutable_cf_options.disable_auto_compactions);
       internal_stats_->AddCFStats(
           InternalStats::PENDING_COMPACTION_BYTES_LIMIT_SLOWDOWNS, 1);
       write_stall_condition = WriteStallCondition::kDelayed;
@@ -971,7 +975,7 @@ void ColumnFamilyData::InstallSuperVersion(
   ++super_version_number_;
   super_version_->version_number = super_version_number_;
   super_version_->write_stall_condition =
-      RecalculateWriteStallConditions(mutable_cf_options);
+      RecalculateWriteStallConditions();
 
   if (old_superversion != nullptr) {
     // Reset SuperVersions cached in thread local storage.
