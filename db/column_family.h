@@ -353,7 +353,7 @@ class ColumnFamilyData {
                    const ColumnFamilyOptions& options,
                    const ImmutableDBOptions& db_options,
                    const EnvOptions& env_options,
-                   ColumnFamilySet* column_family_set);
+                   ColumnFamilySet* column_family_set, Env* env);
 
   uint32_t id_;
   const std::string name_;
@@ -409,6 +409,7 @@ class ColumnFamilyData {
   std::unique_ptr<CompactionPicker> compaction_picker_;
 
   ColumnFamilySet* column_family_set_;
+  Env* env_;
 
   std::unique_ptr<WriteControllerToken> write_controller_token_;
 

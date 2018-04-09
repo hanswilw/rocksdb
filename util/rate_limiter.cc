@@ -13,6 +13,9 @@
 #include "rocksdb/env.h"
 #include "util/aligned_buffer.h"
 #include "util/sync_point.h"
+#include <iostream>
+#include "rocksdb/db.h"
+#include "db/column_family.h"
 
 namespace rocksdb {
 
@@ -49,7 +52,7 @@ GenericRateLimiter::GenericRateLimiter(int64_t rate_bytes_per_sec,
                                        Env* env, bool auto_tuned, bool optimize_writes)
     : RateLimiter(mode),
       refill_period_us_(refill_period_us),
-      rate_bytes_per_sec_(auto_tuned ? rate_bytes_per_sec / 2
+      rate_bytes_per_sec_((auto_tuned || optimize_writes) ? rate_bytes_per_sec / 2
                                      : rate_bytes_per_sec),
       refill_bytes_per_period_(
           CalculateRefillBytesPerPeriod(rate_bytes_per_sec_)),
@@ -106,18 +109,21 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
   TEST_SYNC_POINT_CALLBACK("GenericRateLimiter::Request:1",
                            &rate_bytes_per_sec_);
   MutexLock g(&request_mutex_);
+  std::string asd = optimize_writes_ ? "true" : "false";
+  std::string dsa = auto_tuned_ ? "true" : "false";
 
-  RecordTick(stats, COMPACTION_DISABLED_COUNT);
-  if (optimize_writes_) {
-    RecordTick(stats, COMPACTION_DISABLED_COUNT);
-  }
-
-  if (auto_tuned_) {
+  //std::cout << "A" + asd +"B" + dsa;
+  if (auto_tuned_ || optimize_writes_) {
     static const int kRefillsPerTune = 100;
     std::chrono::microseconds now(NowMicrosMonotonic(env_));
     if (now - tuned_time_ >=
         kRefillsPerTune * std::chrono::microseconds(refill_period_us_)) {
-      Tune();
+      if (auto_tuned_) {
+        Tune();
+      }
+      if (optimize_writes_) {
+        TuneCompaction(stats);
+      }
     }
   }
 
@@ -330,13 +336,63 @@ Status GenericRateLimiter::Tune() {
   return Status::OK();
 }
 
+Status GenericRateLimiter::TuneCompaction(Statistics* stats) {
+  const int kLowWatermarkPct = 50;
+  const int kHighWatermarkPct = 90;
+
+  std::chrono::microseconds prev_tuned_time = tuned_time_;
+  tuned_time_ = std::chrono::microseconds(NowMicrosMonotonic(env_));
+
+  int64_t elapsed_intervals = (tuned_time_ - prev_tuned_time +
+                               std::chrono::microseconds(refill_period_us_) -
+                               std::chrono::microseconds(1)) /
+                              std::chrono::microseconds(refill_period_us_);
+  // We tune every kRefillsPerTune intervals, so the overflow and division-by-
+  // zero conditions should never happen.
+  assert(num_drains_ - prev_num_drains_ <= port::kMaxInt64 / 100);
+  assert(elapsed_intervals > 0);
+  int64_t drained_pct =
+          (num_drains_ - prev_num_drains_) * 100 / elapsed_intervals;
+
+  if (drained_pct > 0 || num_drains_ > 0) {
+    std::cout << "\nTUNECOMPACT\n";
+    std::cout << std::to_string(drained_pct);
+    std::cout << std::to_string(num_drains_);
+  }
+  if (drained_pct == 0) {
+    // Nothing
+  } else if (drained_pct < kLowWatermarkPct) {
+    // sanitize to prevent overflow
+    // ENABLE AND TRIGGER COMPACTION
+    std::cout << "\nENABLE COMPACTIONS\n";
+    std::cout << std::to_string(env_->GetDisableAutoCompactions());
+    env_->SetDisableAutoCompactions(false);
+    std::cout << std::to_string(env_->GetDisableAutoCompactions());
+    std::cout << "\nEND\n";
+
+  } else if (drained_pct >= kHighWatermarkPct) {
+    // DISABLE
+    std::cout << "\nDISABLE COMPACTION\n";
+    std::cout << std::to_string(env_->GetDisableAutoCompactions());
+    env_->SetDisableAutoCompactions(true);
+    std::cout << std::to_string(env_->GetDisableAutoCompactions());
+    std::cout << "\nEND\n";
+    RecordTick(stats, COMPACTION_DISABLED_COUNT, 1);
+    // sanitize to prevent overflow
+  }
+  num_drains_ = prev_num_drains_;
+  return Status::OK();
+}
+
 RateLimiter* NewGenericRateLimiter(
     int64_t rate_bytes_per_sec, int64_t refill_period_us /* = 100 * 1000 */,
     int32_t fairness /* = 10 */,
     RateLimiter::Mode mode /* = RateLimiter::Mode::kWritesOnly */,
     bool auto_tuned /* = false */,
     bool optimize_writes /* =false */) {
-  assert(rate_bytes_per_sec > 0);
+  std::string asd = optimize_writes ? "true" : "false";
+ std::cout << "generic" + asd;
+    assert(rate_bytes_per_sec > 0);
   assert(refill_period_us > 0);
   assert(fairness > 0);
   return new GenericRateLimiter(rate_bytes_per_sec, refill_period_us, fairness,
