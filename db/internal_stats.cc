@@ -831,6 +831,8 @@ void InternalStats::DumpDBStats(std::string* value) {
   uint64_t wal_synced = GetDBStats(InternalStats::WAL_FILE_SYNCED);
   uint64_t write_with_wal = GetDBStats(InternalStats::WRITE_WITH_WAL);
   uint64_t write_stall_micros = GetDBStats(InternalStats::WRITE_STALL_MICROS);
+  bool disable_auto_compactions = InternalStats::env_->disable_auto_compactions;
+  int level0_file_num_compaction_trigger = InternalStats::env_->level0_file_num_compaction_trigger;
 
   const int kHumanMicrosLen = 32;
   char human_micros[kHumanMicrosLen];
@@ -844,6 +846,10 @@ void InternalStats::DumpDBStats(std::string* value) {
   // writes/groups is the average group commit size.
   //
   // The format is the same for interval stats.
+  snprintf(buf, sizeof(buf), "COMPACTIONS DISABLED: %s\n", disable_auto_compactions ? "1" : "0");
+  value->append(buf);
+  snprintf(buf, sizeof(buf), "level0_file_num_compaction_trigger: %d\n", level0_file_num_compaction_trigger);
+  value->append(buf);
   snprintf(buf, sizeof(buf),
            "Cumulative writes: %s writes, %s keys, %s commit groups, "
            "%.1f writes per commit group, ingest: %.2f GB, %.2f MB/s\n",

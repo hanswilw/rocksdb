@@ -394,6 +394,8 @@ class InternalStats {
     uint64_t num_keys_written;
     // Total time writes delayed by stalls.
     uint64_t write_stall_micros;
+    bool disable_auto_compactions;
+    int level0_file_num_compaction_trigger;
     double seconds_up;
 
     DBStatsSnapshot()
@@ -405,6 +407,8 @@ class InternalStats {
           write_self(0),
           num_keys_written(0),
           write_stall_micros(0),
+          disable_auto_compactions(false),
+          level0_file_num_compaction_trigger(0),
           seconds_up(0) {}
 
     void Clear() {
@@ -416,6 +420,8 @@ class InternalStats {
       write_self = 0;
       num_keys_written = 0;
       write_stall_micros = 0;
+      disable_auto_compactions = false;
+      level0_file_num_compaction_trigger = 0;
       seconds_up = 0;
     }
   } db_stats_snapshot_;

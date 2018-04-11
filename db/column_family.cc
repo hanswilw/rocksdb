@@ -436,8 +436,12 @@ ColumnFamilyData::ColumnFamilyData(
       ROCKS_LOG_INFO(ioptions_.info_log, "\t(skipping printing options)\n");
     }
   }
+  // Set compactions interface to options flag initially
   if (env_) {
-    env_->SetDisableAutoCompactions(mutable_cf_options_.disable_auto_compactions);
+    env_->disable_auto_compactions = mutable_cf_options_.disable_auto_compactions;
+    env_->level0_file_num_compaction_trigger = mutable_cf_options_.level0_file_num_compaction_trigger;
+    env_->level0_slowdown_writes_trigger = mutable_cf_options_.level0_slowdown_writes_trigger;
+    env_->level0_stop_writes_trigger = mutable_cf_options_.level0_stop_writes_trigger;
   }
 
   RecalculateWriteStallConditions();
@@ -641,12 +645,14 @@ int GetL0ThresholdSpeedupCompaction(int level0_file_num_compaction_trigger,
 WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions() {
   auto write_stall_condition = WriteStallCondition::kNormal;
   if (current_ != nullptr) {
-    std::cout << "\nCALCULATE\n";
     std::cout << std::to_string(mutable_cf_options_.disable_auto_compactions);
-    std::cout << std::to_string(env_->GetDisableAutoCompactions());
-    mutable_cf_options_.disable_auto_compactions = env_->GetDisableAutoCompactions();
+    std::cout << std::to_string(mutable_cf_options_.level0_file_num_compaction_trigger);
+    mutable_cf_options_.level0_file_num_compaction_trigger = env_->level0_file_num_compaction_trigger;
+    mutable_cf_options_.level0_slowdown_writes_trigger = env_->level0_slowdown_writes_trigger;
+    mutable_cf_options_.level0_stop_writes_trigger = env_->level0_stop_writes_trigger;
+    mutable_cf_options_.disable_auto_compactions = env_->disable_auto_compactions;
     const MutableCFOptions& mutable_cf_options = mutable_cf_options_;
-    std::cout << "\nEND\n";
+    //std::cout << "\nEND\n";
     auto* vstorage = current_->storage_info();
     auto write_controller = column_family_set_->write_controller_;
     uint64_t compaction_needed_bytes =

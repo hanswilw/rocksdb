@@ -354,29 +354,20 @@ Status GenericRateLimiter::TuneCompaction(Statistics* stats) {
   int64_t drained_pct =
           (num_drains_ - prev_num_drains_) * 100 / elapsed_intervals;
 
-  if (drained_pct > 0 || num_drains_ > 0) {
-    std::cout << "\nTUNECOMPACT\n";
-    std::cout << std::to_string(drained_pct);
-    std::cout << std::to_string(num_drains_);
-  }
+  std::cout << "\nTUNECOMPACT\n";
+  std::cout << std::to_string(drained_pct);
   if (drained_pct == 0) {
     // Nothing
   } else if (drained_pct < kLowWatermarkPct) {
     // sanitize to prevent overflow
     // ENABLE AND TRIGGER COMPACTION
     std::cout << "\nENABLE COMPACTIONS\n";
-    std::cout << std::to_string(env_->GetDisableAutoCompactions());
-    env_->SetDisableAutoCompactions(false);
-    std::cout << std::to_string(env_->GetDisableAutoCompactions());
-    std::cout << "\nEND\n";
+    env_->EnableCompactions();
 
   } else if (drained_pct >= kHighWatermarkPct) {
     // DISABLE
     std::cout << "\nDISABLE COMPACTION\n";
-    std::cout << std::to_string(env_->GetDisableAutoCompactions());
-    env_->SetDisableAutoCompactions(true);
-    std::cout << std::to_string(env_->GetDisableAutoCompactions());
-    std::cout << "\nEND\n";
+    env_->DisableCompactions();
     RecordTick(stats, COMPACTION_DISABLED_COUNT, 1);
     // sanitize to prevent overflow
   }
