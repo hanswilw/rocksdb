@@ -376,12 +376,30 @@ class Env {
   virtual Status GetAbsolutePath(const std::string& db_path,
       std::string* output_path) = 0;
 
-  bool disable_auto_compactions = false;
-  void SetDisableAutoCompactions(bool new_val) {
-    disable_auto_compactions = new_val;
+  bool disable_auto_compactions;
+  int prev_level0_file_num_compaction_trigger;
+  int level0_file_num_compaction_trigger;
+  int prev_level0_slowdown_writes_trigger;
+  int level0_slowdown_writes_trigger;
+  int prev_level0_stop_writes_trigger;
+  int level0_stop_writes_trigger;
+;
+
+  void DisableCompactions() {
+    prev_level0_file_num_compaction_trigger = level0_file_num_compaction_trigger;
+    prev_level0_slowdown_writes_trigger = level0_slowdown_writes_trigger;
+    prev_level0_stop_writes_trigger = level0_stop_writes_trigger;
+    disable_auto_compactions = true;
+    level0_file_num_compaction_trigger = (1<<30);
+    level0_slowdown_writes_trigger = (1<<30);
+    level0_stop_writes_trigger = (1<<30);
   };
-  bool GetDisableAutoCompactions() const {
-    return disable_auto_compactions;
+
+  void EnableCompactions() {
+    disable_auto_compactions = false;
+    level0_file_num_compaction_trigger = prev_level0_file_num_compaction_trigger;
+    level0_slowdown_writes_trigger = prev_level0_slowdown_writes_trigger;
+    level0_stop_writes_trigger = prev_level0_stop_writes_trigger;
   }
 
   // The number of background worker threads of a specific thread pool
