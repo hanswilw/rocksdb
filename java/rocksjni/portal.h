@@ -2529,6 +2529,10 @@ class TickerTypeJni {
         return 0x5E;
       case rocksdb::Tickers::COMPACTION_DISABLED_COUNT:
         return 0x5F;
+      case rocksdb::Tickers::NUMBER_RATE_LIMITER_LOW_PRI_DRAINS:
+        return 0x60;
+      case rocksdb::Tickers::NUMBER_RATE_LIMITER_HIGH_PRI_DRAINS:
+        return 0x61;
 
       default:
         // undefined/default
@@ -2732,6 +2736,10 @@ class TickerTypeJni {
         return rocksdb::Tickers::TICKER_ENUM_MAX;
       case 0x5F:
         return rocksdb::Tickers::COMPACTION_DISABLED_COUNT;
+      case 0x60:
+        return rocksdb::Tickers::NUMBER_RATE_LIMITER_LOW_PRI_DRAINS;
+      case 0x61:
+        return rocksdb::Tickers::NUMBER_RATE_LIMITER_HIGH_PRI_DRAINS;
 
       default:
         // undefined/default
