@@ -386,20 +386,24 @@ class Env {
 ;
 
   void DisableCompactions() {
-    prev_level0_file_num_compaction_trigger = level0_file_num_compaction_trigger;
-    prev_level0_slowdown_writes_trigger = level0_slowdown_writes_trigger;
-    prev_level0_stop_writes_trigger = level0_stop_writes_trigger;
-    disable_auto_compactions = true;
-    level0_file_num_compaction_trigger = (1<<30);
-    level0_slowdown_writes_trigger = (1<<30);
-    level0_stop_writes_trigger = (1<<30);
+    if (!disable_auto_compactions) {
+      prev_level0_file_num_compaction_trigger = level0_file_num_compaction_trigger;
+      prev_level0_slowdown_writes_trigger = level0_slowdown_writes_trigger;
+      prev_level0_stop_writes_trigger = level0_stop_writes_trigger;
+      disable_auto_compactions = true;
+      level0_file_num_compaction_trigger = (1<<30);
+      level0_slowdown_writes_trigger = (1<<30);
+      level0_stop_writes_trigger = (1<<30);
+    }
   };
 
   void EnableCompactions() {
-    disable_auto_compactions = false;
-    level0_file_num_compaction_trigger = prev_level0_file_num_compaction_trigger;
-    level0_slowdown_writes_trigger = prev_level0_slowdown_writes_trigger;
-    level0_stop_writes_trigger = prev_level0_stop_writes_trigger;
+    if (disable_auto_compactions) {
+      disable_auto_compactions = false;
+      level0_file_num_compaction_trigger = prev_level0_file_num_compaction_trigger;
+      level0_slowdown_writes_trigger = prev_level0_slowdown_writes_trigger;
+      level0_stop_writes_trigger = prev_level0_stop_writes_trigger;
+    }
   }
 
   // The number of background worker threads of a specific thread pool
