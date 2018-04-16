@@ -154,11 +154,13 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
     //     to lower priority
     // (3) a previous waiter at the front of queue, who got notified by
     //     previous leader
-    if (leader_ == nullptr &&
-        ((!queue_[Env::IO_HIGH].empty() &&
-            &r == queue_[Env::IO_HIGH].front()) ||
-         (!queue_[Env::IO_LOW].empty() &&
-            &r == queue_[Env::IO_LOW].front()))) {
+    bool leader_isnull = leader_ == nullptr;
+    bool io_high = !leader_isnull ? (!queue_[Env::IO_HIGH].empty() && &r == queue_[Env::IO_HIGH].front()) : false;
+    bool io_low = !io_high ? (!queue_[Env::IO_LOW].empty() && &r == queue_[Env::IO_LOW].front()) : false;
+    std::cout << (leader_isnull ? "true" : "false");
+    std::cout << (io_high ? "true" : "false");
+    std::cout << (io_low ? "true" : "false");
+    if (leader_isnull && (io_high || io_low)) {
       leader_ = &r;
       int64_t delta = next_refill_us_ - NowMicrosMonotonic(env_);
       delta = delta > 0 ? delta : 0;
@@ -167,6 +169,11 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
       } else {
         int64_t wait_until = env_->NowMicros() + delta;
         RecordTick(stats, NUMBER_RATE_LIMITER_DRAINS);
+        if (io_high) {
+          RecordTick(stats, NUMBER_RATE_LIMITER_HIGH_PRI_DRAINS);
+        } else if (io_low) {
+          RecordTick(stats, NUMBER_RATE_LIMITER_LOW_PRI_DRAINS);
+        }
         ++num_drains_;
         timedout = r.cv.TimedWait(wait_until);
       }
