@@ -222,6 +222,8 @@ enum Tickers : uint32_t {
 
   // Number of refill intervals where rate limiter's bytes are fully consumed.
   NUMBER_RATE_LIMITER_DRAINS,
+  NUMBER_RATE_LIMITER_LOW_PRI_DRAINS,
+  NUMBER_RATE_LIMITER_HIGH_PRI_DRAINS,
 
   // Number of internal keys skipped by Iterator
   NUMBER_ITER_SKIP,
@@ -399,7 +401,10 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {ROW_CACHE_MISS, "rocksdb.row.cache.miss"},
     {READ_AMP_ESTIMATE_USEFUL_BYTES, "rocksdb.read.amp.estimate.useful.bytes"},
     {READ_AMP_TOTAL_READ_BYTES, "rocksdb.read.amp.total.read.bytes"},
+    {COMPACTION_DISABLED_COUNT, "rocksdb.compaction.disabled.count"},
     {NUMBER_RATE_LIMITER_DRAINS, "rocksdb.number.rate_limiter.drains"},
+    {NUMBER_RATE_LIMITER_LOW_PRI_DRAINS, "rocksdb.number.rate_limiter.low_pri_drains"},
+    {NUMBER_RATE_LIMITER_HIGH_PRI_DRAINS, "rocksdb.number.rate_limiter.high_pri_drains"},
     {NUMBER_ITER_SKIP, "rocksdb.number.iter.skip"},
     {BLOB_DB_NUM_PUT, "rocksdb.blobdb.num.put"},
     {BLOB_DB_NUM_WRITE, "rocksdb.blobdb.num.write"},
@@ -432,7 +437,6 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {BLOB_DB_FIFO_NUM_FILES_EVICTED, "rocksdb.blobdb.fifo.num.files.evicted"},
     {BLOB_DB_FIFO_NUM_KEYS_EVICTED, "rocksdb.blobdb.fifo.num.keys.evicted"},
     {BLOB_DB_FIFO_BYTES_EVICTED, "rocksdb.blobdb.fifo.bytes.evicted"},
-    {COMPACTION_DISABLED_COUNT, "rocksdb.compaction.disabled.count"},
 };
 
 /**
