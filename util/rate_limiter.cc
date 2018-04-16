@@ -67,7 +67,11 @@ GenericRateLimiter::GenericRateLimiter(int64_t rate_bytes_per_sec,
       leader_(nullptr),
       auto_tuned_(auto_tuned),
       optimize_writes_(optimize_writes),
+      num_low_drains_(0),
+      num_high_drains_(0),
       num_drains_(0),
+      prev_num_low_drains_(0),
+      prev_num_high_drains_(0),
       prev_num_drains_(0),
       max_bytes_per_sec_(rate_bytes_per_sec),
       tuned_time_(NowMicrosMonotonic(env_)) {
@@ -112,7 +116,6 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
   std::string asd = optimize_writes_ ? "true" : "false";
   std::string dsa = auto_tuned_ ? "true" : "false";
 
-  //std::cout << "A" + asd +"B" + dsa;
   if (auto_tuned_ || optimize_writes_) {
     static const int kRefillsPerTune = 100;
     std::chrono::microseconds now(NowMicrosMonotonic(env_));
@@ -154,13 +157,11 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
     //     to lower priority
     // (3) a previous waiter at the front of queue, who got notified by
     //     previous leader
+    std::cout << "REQUEST START\n";
     bool leader_isnull = leader_ == nullptr;
-    bool io_high = !leader_isnull ? (!queue_[Env::IO_HIGH].empty() && &r == queue_[Env::IO_HIGH].front()) : false;
+    bool io_high = leader_isnull ? (!queue_[Env::IO_HIGH].empty() && &r == queue_[Env::IO_HIGH].front()) : false;
     bool io_low = !io_high ? (!queue_[Env::IO_LOW].empty() && &r == queue_[Env::IO_LOW].front()) : false;
-    std::cout << (leader_isnull ? "true" : "false");
-    std::cout << (io_high ? "true" : "false");
-    std::cout << (io_low ? "true" : "false");
-    if (leader_isnull && (io_high || io_low)) {
+      if (leader_isnull && (io_high || io_low)) {
       leader_ = &r;
       int64_t delta = next_refill_us_ - NowMicrosMonotonic(env_);
       delta = delta > 0 ? delta : 0;
@@ -171,10 +172,12 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
         RecordTick(stats, NUMBER_RATE_LIMITER_DRAINS);
         if (io_high) {
           RecordTick(stats, NUMBER_RATE_LIMITER_HIGH_PRI_DRAINS);
+          ++num_high_drains_;
         } else if (io_low) {
+          ++num_low_drains_;
           RecordTick(stats, NUMBER_RATE_LIMITER_LOW_PRI_DRAINS);
         }
-        ++num_drains_;
+        num_drains_ = num_high_drains_ + num_low_drains_;
         timedout = r.cv.TimedWait(wait_until);
       }
     } else {
