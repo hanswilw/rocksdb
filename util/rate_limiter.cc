@@ -157,7 +157,6 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
     //     to lower priority
     // (3) a previous waiter at the front of queue, who got notified by
     //     previous leader
-    std::cout << "REQUEST START\n";
     bool leader_isnull = leader_ == nullptr;
     bool io_high = leader_isnull ? (!queue_[Env::IO_HIGH].empty() && &r == queue_[Env::IO_HIGH].front()) : false;
     bool io_low = !io_high ? (!queue_[Env::IO_LOW].empty() && &r == queue_[Env::IO_LOW].front()) : false;
@@ -391,8 +390,6 @@ RateLimiter* NewGenericRateLimiter(
     RateLimiter::Mode mode /* = RateLimiter::Mode::kWritesOnly */,
     bool auto_tuned /* = false */,
     bool optimize_writes /* =false */) {
-  std::string asd = optimize_writes ? "true" : "false";
- std::cout << "generic" + asd;
     assert(rate_bytes_per_sec > 0);
   assert(refill_period_us > 0);
   assert(fairness > 0);

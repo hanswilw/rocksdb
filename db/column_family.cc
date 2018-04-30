@@ -645,8 +645,6 @@ int GetL0ThresholdSpeedupCompaction(int level0_file_num_compaction_trigger,
 WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions() {
   auto write_stall_condition = WriteStallCondition::kNormal;
   if (current_ != nullptr) {
-    std::cout << std::to_string(mutable_cf_options_.disable_auto_compactions);
-    std::cout << std::to_string(mutable_cf_options_.level0_file_num_compaction_trigger);
     mutable_cf_options_.level0_file_num_compaction_trigger = env_->level0_file_num_compaction_trigger;
     mutable_cf_options_.level0_slowdown_writes_trigger = env_->level0_slowdown_writes_trigger;
     mutable_cf_options_.level0_stop_writes_trigger = env_->level0_stop_writes_trigger;
