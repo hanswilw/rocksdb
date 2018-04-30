@@ -109,8 +109,8 @@ class GenericRateLimiter : public RateLimiter {
   int64_t num_low_drains_;
   int64_t num_high_drains_;
   int64_t num_drains_;
-  int64_t prev_low_num_drains_;
-  int64_t prev_high_num_drains_;
+  int64_t prev_num_low_drains_;
+  int64_t prev_num_high_drains_;
   int64_t prev_num_drains_;
   const int64_t max_bytes_per_sec_;
   std::chrono::microseconds tuned_time_;

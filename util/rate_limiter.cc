@@ -360,26 +360,31 @@ Status GenericRateLimiter::TuneCompaction(Statistics* stats) {
   // zero conditions should never happen.
   assert(num_drains_ - prev_num_drains_ <= port::kMaxInt64 / 100);
   assert(elapsed_intervals > 0);
-  int64_t drained_pct =
-          (num_drains_ - prev_num_drains_) * 100 / elapsed_intervals;
+  int64_t drained_high_pct =
+          (num_high_drains_ - prev_num_high_drains_) * 100 / elapsed_intervals;
+  int64_t drained_low_pct =
+          (num_low_drains_ - prev_num_low_drains_) * 100 / elapsed_intervals;
+  int64_t drained_pct = drained_high_pct + drained_low_pct;
 
   std::cout << "\nTUNECOMPACT\n";
-  std::cout << std::to_string(drained_pct);
+  std::cout << std::to_string(drained_pct) + " - " + std::to_string(drained_high_pct) + " - " + std::to_string(drained_low_pct);
   if (drained_pct == 0) {
     // Nothing
-  } else if (drained_pct < kLowWatermarkPct) {
+  } else if (drained_pct <= kHighWatermarkPct && drained_high_pct < kLowWatermarkPct) {
     // sanitize to prevent overflow
     // ENABLE AND TRIGGER COMPACTION
     std::cout << "\nENABLE COMPACTIONS\n";
     env_->EnableCompactions();
 
-  } else if (drained_pct >= kHighWatermarkPct) {
+  } else if (drained_pct >= kHighWatermarkPct && drained_high_pct >= kLowWatermarkPct) {
     // DISABLE
     std::cout << "\nDISABLE COMPACTION\n";
     env_->DisableCompactions();
     RecordTick(stats, COMPACTION_DISABLED_COUNT, 1);
     // sanitize to prevent overflow
   }
+  num_low_drains_ = prev_num_low_drains_;
+  num_high_drains_ = prev_num_high_drains_;
   num_drains_ = prev_num_drains_;
   return Status::OK();
 }
