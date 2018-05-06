@@ -868,6 +868,9 @@ DEFINE_bool(rate_limiter_optimize_writes, false,
 DEFINE_bool(write_rate_sine, false,
             "Use a sine wave write_rate_limit");
 
+DEFINE_int32(seconds, 0,
+            "Set number of seconds to exit the benchmark");
+
 DEFINE_bool(rate_limit_bg_reads, false,
             "Use options.rate_limiter on compaction reads");
 
@@ -3314,6 +3317,9 @@ void VerifyDBFromDB(std::string& truth_db_name) {
       FLAGS_env->LowerThreadPoolIOPriority(Env::HIGH);
     }
     options.env = FLAGS_env;
+    if (FLAGS_write_rate_sine) {
+      FLAGS_benchmark_write_rate_limit = 50000000;
+    }
 
     if (FLAGS_rate_limiter_bytes_per_sec > 0) {
       if (FLAGS_rate_limit_bg_reads &&
@@ -3702,6 +3708,10 @@ void VerifyDBFromDB(std::string& truth_db_name) {
         int64_t usecs_since_last = now - thread->stats.GetSineInterval();
         bool sine_finished = thread->stats.GetSineFinished();
 
+        if (FLAGS_seconds > 0 && usecs_since_start > FLAGS_seconds * 1000000) {
+          std::cout << "Exited after" + std::to_string(FLAGS_seconds);
+          exit(1);
+        }
         if (!sine_finished && usecs_since_start > 350000000) {
           std::cout << "Sine finished\n";
           thread->stats.SetSineFinished();
