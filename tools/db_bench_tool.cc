@@ -862,7 +862,7 @@ DEFINE_bool(rate_limiter_auto_tuned, false,
             "Enable dynamic adjustment of rate limit according to demand for "
             "background I/O");
 
-DEFINE_bool(rate_limiter_optimize_writes, false,
+DEFINE_bool(rate_limiter_auto_tuned_compactions, false,
             "Enable dynamic disabling of compactions when I/O is high");
 
 DEFINE_bool(write_rate_sine, false,
@@ -3346,7 +3346,7 @@ void VerifyDBFromDB(std::string& truth_db_name) {
           10 /* fairness */,
           FLAGS_rate_limit_bg_reads ? RateLimiter::Mode::kReadsOnly
                                     : RateLimiter::Mode::kWritesOnly,
-          FLAGS_rate_limiter_auto_tuned, FLAGS_rate_limiter_optimize_writes));
+          FLAGS_rate_limiter_auto_tuned, FLAGS_rate_limiter_auto_tuned_compactions));
     }
 
     if (FLAGS_num_multi_db <= 1) {

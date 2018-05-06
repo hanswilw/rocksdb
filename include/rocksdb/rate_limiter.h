@@ -130,11 +130,11 @@ class RateLimiter {
 // @auto_tuned: Enables dynamic adjustment of rate limit within the range
 //              `[rate_bytes_per_sec / 20, rate_bytes_per_sec]`, according to
 //              the recent demand for background I/O.
-// @optimize_writes: Enables dynamic disabling of compactions when high write I/O
+// @auto_tuned_compactions: Enables dynamic disabling of compactions when high write I/O
     extern RateLimiter* NewGenericRateLimiter(
     int64_t rate_bytes_per_sec, int64_t refill_period_us = 100 * 1000,
     int32_t fairness = 10,
     RateLimiter::Mode mode = RateLimiter::Mode::kWritesOnly,
-    bool auto_tuned = false, bool optimize_writes = false);
+    bool auto_tuned = false, bool auto_tuned_compactions = false);
 
 }  // namespace rocksdb

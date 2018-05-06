@@ -31,7 +31,7 @@ class RateLimiterTest : public testing::Test {};
 TEST_F(RateLimiterTest, OverflowRate) {
   GenericRateLimiter limiter(port::kMaxInt64, 1000, 10,
                              RateLimiter::Mode::kWritesOnly, Env::Default(),
-                             false /* auto_tuned */, false /* optimize_writes */);
+                             false /* auto_tuned */, false /* auto_tuned_compactions */);
   ASSERT_GT(limiter.GetSingleBurstBytes(), 1000000000ll);
 }
 
@@ -44,7 +44,7 @@ TEST_F(RateLimiterTest, Modes) {
                     RateLimiter::Mode::kReadsOnly, RateLimiter::Mode::kAllIo}) {
     GenericRateLimiter limiter(
         2000 /* rate_bytes_per_sec */, 1000 * 1000 /* refill_period_us */,
-        10 /* fairness */, mode, Env::Default(), false /* auto_tuned */, false /* optimize_writes */);
+        10 /* fairness */, mode, Env::Default(), false /* auto_tuned */, false /* auto_tuned_compactions */);
     limiter.Request(1000 /* bytes */, Env::IO_HIGH, nullptr /* stats */,
                     RateLimiter::OpType::kRead);
     if (mode == RateLimiter::Mode::kWritesOnly) {
@@ -155,7 +155,7 @@ TEST_F(RateLimiterTest, LimitChangeTest) {
       std::shared_ptr<RateLimiter> limiter =
           std::make_shared<GenericRateLimiter>(
               target, refill_period, 10, RateLimiter::Mode::kWritesOnly,
-              Env::Default(), false /* auto_tuned */, false /* optimize_writes */);
+              Env::Default(), false /* auto_tuned */, false /* auto_tuned_compactions */);
       rocksdb::SyncPoint::GetInstance()->LoadDependency(
           {{"GenericRateLimiter::Request",
             "RateLimiterTest::LimitChangeTest:changeLimitStart"},
@@ -192,7 +192,7 @@ TEST_F(RateLimiterTest, AutoTuneIncreaseWhenFull) {
   std::unique_ptr<RateLimiter> rate_limiter(new GenericRateLimiter(
       1000 /* rate_bytes_per_sec */,
       std::chrono::microseconds(kTimePerRefill).count(), 10 /* fairness */,
-      RateLimiter::Mode::kWritesOnly, &special_env, true /* auto_tuned */, false /* optimize_writes */));
+      RateLimiter::Mode::kWritesOnly, &special_env, true /* auto_tuned */, false /* auto_tuned_compactions */));
 
   // Use callback to advance time because we need to advance (1) after Request()
   // has determined the bytes are not available; and (2) before Refill()

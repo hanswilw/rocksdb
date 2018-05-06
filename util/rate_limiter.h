@@ -25,7 +25,7 @@ class GenericRateLimiter : public RateLimiter {
  public:
   GenericRateLimiter(int64_t refill_bytes, int64_t refill_period_us,
                      int32_t fairness, RateLimiter::Mode mode, Env* env,
-                     bool auto_tuned, bool optimize_writes);
+                     bool auto_tuned, bool auto_tuned_compactions);
 
   virtual ~GenericRateLimiter();
 
@@ -105,7 +105,7 @@ class GenericRateLimiter : public RateLimiter {
   std::deque<Req*> queue_[Env::IO_TOTAL];
 
   bool auto_tuned_;
-  bool optimize_writes_;
+  bool auto_tuned_compactions_;
   int64_t num_low_drains_;
   int64_t num_high_drains_;
   int64_t num_drains_;
