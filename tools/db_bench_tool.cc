@@ -868,8 +868,20 @@ DEFINE_bool(rate_limiter_optimize_writes, false,
 DEFINE_bool(write_rate_sine, false,
             "Use a sine wave write_rate_limit");
 
+DEFINE_double(sine_a, 1,
+             "A in f(x) = A sin(bx + c) + d");
+
+DEFINE_double(sine_b, 1,
+             "B in f(x) = A sin(bx + c) + d");
+
+DEFINE_double(sine_c, 0,
+             "C in f(x) = A sin(bx + c) + d");
+
+DEFINE_double(sine_d, 0,
+             "D in f(x) = A sin(bx + c) + d");
+
 DEFINE_int32(seconds, 0,
-            "Set number of seconds to exit the benchmark");
+             "Set number of seconds to exit the benchmark");
 
 DEFINE_bool(rate_limit_bg_reads, false,
             "Use options.rate_limiter on compaction reads");
@@ -3556,6 +3568,10 @@ void VerifyDBFromDB(std::string& truth_db_name) {
     }
   }
 
+  double SineRate(double x) {
+    return FLAGS_sine_a*sin((FLAGS_sine_b*x) + FLAGS_sine_c) + FLAGS_sine_d;
+  }
+
   void DoWrite(ThreadState* thread, WriteMode write_mode) {
     const int test_duration = write_mode == RANDOM ? FLAGS_duration : 0;
     const int64_t num_ops = writes_ == 0 ? num_ : writes_;
@@ -3721,16 +3737,10 @@ void VerifyDBFromDB(std::string& truth_db_name) {
         else if (!sine_finished && FLAGS_stats_interval_seconds &&
             usecs_since_last > (FLAGS_stats_interval_seconds * 1000000)) {
           thread->stats.ResetSineInterval();
-          int test = (int) (75000000*cos(((usecs_since_start/1000)/(17500*3.14)) + 3.14) + 125000000);
-          std::cout << "\nNew rate limit\t" + std::to_string(test) + "\n";
+          int write_rate = (int) SineRate(usecs_since_start/1000000);
+          std::cout << "\nNew write rate\t" + std::to_string(write_rate) + "\n";
           thread->shared->write_rate_limiter.reset(
-                  NewGenericRateLimiter(test));
-        }
-        else if (!FLAGS_stats_interval_seconds && num_written <= 500000 && num_written % 10000 == 0) {
-          int test = (int) (75000000*cos((num_written/(25000*3.14)) + 3.14) + 125000000);
-          std::cout << "\nNew rate limit:\t" + std::to_string(test) + "\n";
-          thread->shared->write_rate_limiter.reset(
-                  NewGenericRateLimiter(test));
+                  NewGenericRateLimiter(write_rate));
         }
       }
       if (!s.ok()) {
