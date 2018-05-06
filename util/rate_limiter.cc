@@ -113,8 +113,6 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
   TEST_SYNC_POINT_CALLBACK("GenericRateLimiter::Request:1",
                            &rate_bytes_per_sec_);
   MutexLock g(&request_mutex_);
-  std::string asd = optimize_writes_ ? "true" : "false";
-  std::string dsa = auto_tuned_ ? "true" : "false";
 
   if (auto_tuned_ || optimize_writes_) {
     static const int kRefillsPerTune = 100;
