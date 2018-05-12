@@ -166,15 +166,15 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
         timedout = true;
       } else {
         int64_t wait_until = env_->NowMicros() + delta;
-        RecordTick(stats, NUMBER_RATE_LIMITER_DRAINS);
         if (io_high) {
-          RecordTick(stats, NUMBER_RATE_LIMITER_HIGH_PRI_DRAINS);
           ++num_high_drains_;
+          RecordTick(stats, NUMBER_RATE_LIMITER_HIGH_PRI_DRAINS);
         } else if (io_low) {
           ++num_low_drains_;
           RecordTick(stats, NUMBER_RATE_LIMITER_LOW_PRI_DRAINS);
         }
         num_drains_ = num_high_drains_ + num_low_drains_;
+        RecordTick(stats, NUMBER_RATE_LIMITER_DRAINS);
         timedout = r.cv.TimedWait(wait_until);
       }
     } else {

@@ -3717,17 +3717,17 @@ void VerifyDBFromDB(std::string& truth_db_name) {
       }
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db,
                                 entries_per_batch_, kWrite);
-      if (FLAGS_write_rate_sine) {
-        uint64_t now = FLAGS_env->NowMicros();
 
-        int64_t usecs_since_start = now - thread->stats.GetStart();
+      uint64_t now = FLAGS_env->NowMicros();
+      int64_t usecs_since_start = now - thread->stats.GetStart();
+      if (FLAGS_seconds > 0 && usecs_since_start > (FLAGS_seconds * 1000000)) {
+        std::cout << "Exited after" + std::to_string(FLAGS_seconds);
+        exit(0);
+      }
+      if (FLAGS_write_rate_sine) {
         int64_t usecs_since_last = now - thread->stats.GetSineInterval();
         bool sine_finished = thread->stats.GetSineFinished();
 
-        if (FLAGS_seconds > 0 && usecs_since_start > FLAGS_seconds * 1000000) {
-          std::cout << "Exited after" + std::to_string(FLAGS_seconds);
-          exit(1);
-        }
         if (!sine_finished && usecs_since_start > 350000000) {
           std::cout << "Sine finished\n";
           thread->stats.SetSineFinished();
