@@ -883,6 +883,12 @@ DEFINE_double(sine_d, 0,
 DEFINE_int32(seconds, 0,
              "Set number of seconds to exit the benchmark");
 
+DEFINE_int32(sine_finished_seconds, 0,
+             "Number of seconds to opt out of sine wave and use rate_limiter_bytes_per_second instead");
+
+DEFINE_int32(sine_finished_write_rate_limit, 0,
+             "Write rate limit when opting out of sine wave");
+
 DEFINE_bool(rate_limit_bg_reads, false,
             "Use options.rate_limiter on compaction reads");
 
@@ -3728,11 +3734,11 @@ void VerifyDBFromDB(std::string& truth_db_name) {
         int64_t usecs_since_last = now - thread->stats.GetSineInterval();
         bool sine_finished = thread->stats.GetSineFinished();
 
-        if (!sine_finished && usecs_since_start > 350000000) {
+        if (!sine_finished && usecs_since_start > (FLAGS_sine_finished_seconds * 1000000)) {
           std::cout << "Sine finished\n";
           thread->stats.SetSineFinished();
           thread->shared->write_rate_limiter.reset(
-                  NewGenericRateLimiter(10000000));
+                  NewGenericRateLimiter(FLAGS_sine_finished_write_rate_limit));
         }
         else if (!sine_finished && FLAGS_stats_interval_seconds &&
             usecs_since_last > (FLAGS_stats_interval_seconds * 1000000)) {
