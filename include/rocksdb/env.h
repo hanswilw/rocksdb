@@ -379,21 +379,12 @@ class Env {
   bool disable_auto_compactions;
   int prev_level0_file_num_compaction_trigger;
   int level0_file_num_compaction_trigger;
-  int prev_level0_slowdown_writes_trigger;
-  int level0_slowdown_writes_trigger;
-  int prev_level0_stop_writes_trigger;
-  int level0_stop_writes_trigger;
-;
 
   void DisableCompactions() {
     if (!disable_auto_compactions) {
-      prev_level0_file_num_compaction_trigger = level0_file_num_compaction_trigger;
-      prev_level0_slowdown_writes_trigger = level0_slowdown_writes_trigger;
-      prev_level0_stop_writes_trigger = level0_stop_writes_trigger;
       disable_auto_compactions = true;
+      prev_level0_file_num_compaction_trigger = level0_file_num_compaction_trigger;
       level0_file_num_compaction_trigger = (1<<30);
-      level0_slowdown_writes_trigger = (1<<30);
-      level0_stop_writes_trigger = (1<<30);
     }
   };
 
@@ -401,8 +392,6 @@ class Env {
     if (disable_auto_compactions) {
       disable_auto_compactions = false;
       level0_file_num_compaction_trigger = prev_level0_file_num_compaction_trigger;
-      level0_slowdown_writes_trigger = prev_level0_slowdown_writes_trigger;
-      level0_stop_writes_trigger = prev_level0_stop_writes_trigger;
     }
   }
 
