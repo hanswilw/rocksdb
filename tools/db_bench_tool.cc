@@ -3735,7 +3735,7 @@ void VerifyDBFromDB(std::string& truth_db_name) {
         int64_t usecs_since_last = now - thread->stats.GetSineInterval();
         bool sine_finished = thread->stats.GetSineFinished();
 
-        if (!sine_finished && usecs_since_start > (FLAGS_sine_finished_seconds * 1000000)) {
+        if (!sine_finished && FLAGS_sine_finished_seconds > 0 && usecs_since_start > (FLAGS_sine_finished_seconds * 1000000)) {
           std::cout << "Sine finished\n";
           thread->stats.SetSineFinished();
           thread->shared->write_rate_limiter.reset(
