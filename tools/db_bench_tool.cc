@@ -868,6 +868,9 @@ DEFINE_bool(auto_tuned_compactions, false,
 DEFINE_bool(write_rate_sine, false,
             "Use a sine wave write_rate_limit");
 
+DEFINE_uint64(sine_write_rate_interval_milliseconds, 10000,
+              "Interval of which the sine wave write_rate_limit is recalculated");
+
 DEFINE_double(sine_a, 1,
              "A in f(x) = A sin(bx + c) + d");
 
@@ -879,9 +882,6 @@ DEFINE_double(sine_c, 0,
 
 DEFINE_double(sine_d, 0,
              "D in f(x) = A sin(bx + c) + d");
-
-DEFINE_int32(seconds, 0,
-             "Set number of seconds to exit the benchmark");
 
 DEFINE_int32(sine_finished_seconds, 0,
              "Number of seconds to opt out of sine wave and use rate_limiter_bytes_per_second instead");
@@ -3727,24 +3727,23 @@ void VerifyDBFromDB(std::string& truth_db_name) {
 
       uint64_t now = FLAGS_env->NowMicros();
       int64_t usecs_since_start = now - thread->stats.GetStart();
-      if (FLAGS_seconds > 0 && usecs_since_start > (FLAGS_seconds * 1000000)) {
-        std::cout << "Exited after" + std::to_string(FLAGS_seconds);
-        exit(0);
-      }
       if (FLAGS_write_rate_sine) {
         int64_t usecs_since_last = now - thread->stats.GetSineInterval();
         bool sine_finished = thread->stats.GetSineFinished();
 
-        if (!sine_finished && FLAGS_sine_finished_seconds > 0 && usecs_since_start > (FLAGS_sine_finished_seconds * 1000000)) {
+        if (!sine_finished && FLAGS_sine_finished_seconds > 0 &&
+            usecs_since_start > (FLAGS_sine_finished_seconds * 1000000)) {
           std::cout << "Sine finished\n";
           thread->stats.SetSineFinished();
           thread->shared->write_rate_limiter.reset(
                   NewGenericRateLimiter(FLAGS_sine_finished_write_rate_limit));
         }
-        else if (!sine_finished && FLAGS_stats_interval_seconds &&
-            usecs_since_last > (FLAGS_stats_interval_seconds * 1000000)) {
+        else if (!sine_finished &&
+            usecs_since_last > (FLAGS_sine_write_rate_interval_milliseconds * uint64_t{1000})) {
           thread->stats.ResetSineInterval();
-          int write_rate = (int) SineRate(usecs_since_start/1000000);
+          uint64_t write_rate = static_cast<uint64_t>(
+                  SineRate(static_cast<double>(usecs_since_start) / 1000000.0)
+          );
           std::cout << "\nNew write rate\t" + std::to_string(write_rate) + "\n";
           thread->shared->write_rate_limiter.reset(
                   NewGenericRateLimiter(write_rate));
