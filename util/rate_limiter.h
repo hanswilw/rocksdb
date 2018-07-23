@@ -25,7 +25,7 @@ class GenericRateLimiter : public RateLimiter {
  public:
   GenericRateLimiter(int64_t refill_bytes, int64_t refill_period_us,
                      int32_t fairness, RateLimiter::Mode mode, Env* env,
-                     bool auto_tuned);
+                     bool auto_tuned, bool auto_tuned_compactions);
 
   virtual ~GenericRateLimiter();
 
@@ -70,6 +70,7 @@ class GenericRateLimiter : public RateLimiter {
   void Refill();
   int64_t CalculateRefillBytesPerPeriod(int64_t rate_bytes_per_sec);
   Status Tune();
+  Status TuneCompaction(Statistics* stats);
 
   uint64_t NowMicrosMonotonic(Env* env) {
     return env->NowNanos() / std::milli::den;
@@ -104,7 +105,12 @@ class GenericRateLimiter : public RateLimiter {
   std::deque<Req*> queue_[Env::IO_TOTAL];
 
   bool auto_tuned_;
+  bool auto_tuned_compactions_;
+  int64_t num_low_drains_;
+  int64_t num_high_drains_;
   int64_t num_drains_;
+  int64_t prev_num_low_drains_;
+  int64_t prev_num_high_drains_;
   int64_t prev_num_drains_;
   const int64_t max_bytes_per_sec_;
   std::chrono::microseconds tuned_time_;

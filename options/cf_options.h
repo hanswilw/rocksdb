@@ -131,6 +131,7 @@ struct MutableCFOptions {
         max_successive_merges(options.max_successive_merges),
         inplace_update_num_locks(options.inplace_update_num_locks),
         disable_auto_compactions(options.disable_auto_compactions),
+        auto_tuned_compactions(options.auto_tuned_compactions),
         soft_pending_compaction_bytes_limit(
             options.soft_pending_compaction_bytes_limit),
         hard_pending_compaction_bytes_limit(
@@ -165,6 +166,7 @@ struct MutableCFOptions {
         max_successive_merges(0),
         inplace_update_num_locks(0),
         disable_auto_compactions(false),
+        auto_tuned_compactions(false),
         soft_pending_compaction_bytes_limit(0),
         hard_pending_compaction_bytes_limit(0),
         level0_file_num_compaction_trigger(0),
@@ -186,6 +188,13 @@ struct MutableCFOptions {
 
   void RefreshDerivedOptions(const ImmutableCFOptions& ioptions) {
     RefreshDerivedOptions(ioptions.num_levels, ioptions.compaction_style);
+  }
+
+  void PrepareAutoTunedCompactions() {
+    level0_slowdown_writes_trigger = (1<<30);
+    level0_stop_writes_trigger = (1<<30);
+    soft_pending_compaction_bytes_limit = 0;
+    hard_pending_compaction_bytes_limit = 0;
   }
 
   // Get the max file size in a given level.
@@ -211,6 +220,7 @@ struct MutableCFOptions {
 
   // Compaction related options
   bool disable_auto_compactions;
+  bool auto_tuned_compactions;
   uint64_t soft_pending_compaction_bytes_limit;
   uint64_t hard_pending_compaction_bytes_limit;
   int level0_file_num_compaction_trigger;

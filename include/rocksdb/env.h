@@ -376,6 +376,25 @@ class Env {
   virtual Status GetAbsolutePath(const std::string& db_path,
       std::string* output_path) = 0;
 
+  bool disable_auto_compactions;
+  int prev_level0_file_num_compaction_trigger;
+  int level0_file_num_compaction_trigger;
+
+  void DisableCompactions() {
+    if (!disable_auto_compactions) {
+      disable_auto_compactions = true;
+      prev_level0_file_num_compaction_trigger = level0_file_num_compaction_trigger;
+      level0_file_num_compaction_trigger = (1<<30);
+    }
+  };
+
+  void EnableCompactions() {
+    if (disable_auto_compactions) {
+      disable_auto_compactions = false;
+      level0_file_num_compaction_trigger = prev_level0_file_num_compaction_trigger;
+    }
+  }
+
   // The number of background worker threads of a specific thread pool
   // for this environment. 'LOW' is the default pool.
   // default number: 1

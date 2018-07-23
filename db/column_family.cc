@@ -13,6 +13,7 @@
 #define __STDC_FORMAT_MACROS
 #endif
 
+#include <iostream>
 #include <inttypes.h>
 #include <vector>
 #include <string>
@@ -358,7 +359,7 @@ ColumnFamilyData::ColumnFamilyData(
     uint32_t id, const std::string& name, Version* _dummy_versions,
     Cache* _table_cache, WriteBufferManager* write_buffer_manager,
     const ColumnFamilyOptions& cf_options, const ImmutableDBOptions& db_options,
-    const EnvOptions& env_options, ColumnFamilySet* column_family_set)
+    const EnvOptions& env_options, ColumnFamilySet* column_family_set, Env* env)
     : id_(id),
       name_(name),
       dummy_versions_(_dummy_versions),
@@ -383,6 +384,7 @@ ColumnFamilyData::ColumnFamilyData(
       prev_(nullptr),
       log_number_(0),
       column_family_set_(column_family_set),
+      env_(env),
       pending_flush_(false),
       pending_compaction_(false),
       prev_compaction_needed_bytes_(0),
@@ -434,9 +436,16 @@ ColumnFamilyData::ColumnFamilyData(
       ROCKS_LOG_INFO(ioptions_.info_log, "\t(skipping printing options)\n");
     }
   }
+  // Set compactions interface to options flag initially
+  if (env_ && mutable_cf_options_.auto_tuned_compactions) {
+    env_->disable_auto_compactions = mutable_cf_options_.disable_auto_compactions;
+    env_->level0_file_num_compaction_trigger = mutable_cf_options_.level0_file_num_compaction_trigger;
+    mutable_cf_options_.PrepareAutoTunedCompactions();
+  }
 
-  RecalculateWriteStallConditions(mutable_cf_options_);
+  RecalculateWriteStallConditions();
 }
+
 
 // DB mutex held
 ColumnFamilyData::~ColumnFamilyData() {
@@ -632,10 +641,14 @@ int GetL0ThresholdSpeedupCompaction(int level0_file_num_compaction_trigger,
 }
 }  // namespace
 
-WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
-      const MutableCFOptions& mutable_cf_options) {
+WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions() {
   auto write_stall_condition = WriteStallCondition::kNormal;
   if (current_ != nullptr) {
+    if (mutable_cf_options_.auto_tuned_compactions) {
+      mutable_cf_options_.level0_file_num_compaction_trigger = env_->level0_file_num_compaction_trigger;
+      mutable_cf_options_.disable_auto_compactions = env_->disable_auto_compactions;
+    }
+    const MutableCFOptions& mutable_cf_options = mutable_cf_options_;
     auto* vstorage = current_->storage_info();
     auto write_controller = column_family_set_->write_controller_;
     uint64_t compaction_needed_bytes =
@@ -964,7 +977,7 @@ void ColumnFamilyData::InstallSuperVersion(
   ++super_version_number_;
   super_version_->version_number = super_version_number_;
   super_version_->write_stall_condition =
-      RecalculateWriteStallConditions(mutable_cf_options);
+      RecalculateWriteStallConditions();
 
   if (old_superversion != nullptr) {
     // Reset SuperVersions cached in thread local storage.
@@ -1049,7 +1062,7 @@ ColumnFamilySet::ColumnFamilySet(const std::string& dbname,
     : max_column_family_(0),
       dummy_cfd_(new ColumnFamilyData(0, "", nullptr, nullptr, nullptr,
                                       ColumnFamilyOptions(), *db_options,
-                                      env_options, nullptr)),
+                                      env_options, nullptr, nullptr)),
       default_cfd_cache_(nullptr),
       db_name_(dbname),
       db_options_(db_options),
@@ -1120,7 +1133,7 @@ ColumnFamilyData* ColumnFamilySet::CreateColumnFamily(
   assert(column_families_.find(name) == column_families_.end());
   ColumnFamilyData* new_cfd = new ColumnFamilyData(
       id, name, dummy_versions, table_cache_, write_buffer_manager_, options,
-      *db_options_, env_options_, this);
+      *db_options_, env_options_, this, Env::Default());
   column_families_.insert({name, id});
   column_family_data_.insert({id, new_cfd});
   max_column_family_ = std::max(max_column_family_, id);

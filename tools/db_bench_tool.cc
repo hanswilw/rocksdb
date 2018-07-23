@@ -862,6 +862,33 @@ DEFINE_bool(rate_limiter_auto_tuned, false,
             "Enable dynamic adjustment of rate limit according to demand for "
             "background I/O");
 
+DEFINE_bool(auto_tuned_compactions, false,
+            "Enable dynamic disabling of compactions when I/O is high");
+
+DEFINE_bool(write_rate_sine, false,
+            "Use a sine wave write_rate_limit");
+
+DEFINE_uint64(sine_write_rate_interval_milliseconds, 10000,
+              "Interval of which the sine wave write_rate_limit is recalculated");
+
+DEFINE_double(sine_a, 1,
+             "A in f(x) = A sin(bx + c) + d");
+
+DEFINE_double(sine_b, 1,
+             "B in f(x) = A sin(bx + c) + d");
+
+DEFINE_double(sine_c, 0,
+             "C in f(x) = A sin(bx + c) + d");
+
+DEFINE_double(sine_d, 0,
+             "D in f(x) = A sin(bx + c) + d");
+
+DEFINE_int32(sine_finished_seconds, 0,
+             "Number of seconds to opt out of sine wave and use rate_limiter_bytes_per_second instead");
+
+DEFINE_int32(sine_finished_write_rate_limit, 0,
+             "Write rate limit when opting out of sine wave");
+
 DEFINE_bool(rate_limit_bg_reads, false,
             "Use options.rate_limiter on compaction reads");
 
@@ -1451,6 +1478,8 @@ class Stats {
  private:
   int id_;
   uint64_t start_;
+  uint64_t sine_interval_;
+  bool sine_finished_;
   uint64_t finish_;
   double seconds_;
   uint64_t done_;
@@ -1483,6 +1512,8 @@ class Stats {
     bytes_ = 0;
     seconds_ = 0;
     start_ = FLAGS_env->NowMicros();
+    sine_interval_ = FLAGS_env->NowMicros();
+    sine_finished_ = false;
     finish_ = start_;
     last_report_finish_ = start_;
     message_.clear();
@@ -1553,6 +1584,26 @@ class Stats {
       }
       fprintf(stderr, "\n");
     }
+  }
+
+  void ResetSineInterval() {
+    sine_interval_ = FLAGS_env->NowMicros();
+  }
+
+  void SetSineFinished() {
+    sine_finished_ = true;
+  }
+
+  bool GetSineFinished() {
+    return sine_finished_;
+  }
+
+  uint64_t GetSineInterval() {
+    return sine_interval_;
+  }
+
+  uint64_t GetStart() {
+    return start_;
   }
 
   void ResetLastOpTime() {
@@ -3202,6 +3253,7 @@ void VerifyDBFromDB(std::string& truth_db_name) {
     options.table_cache_numshardbits = FLAGS_table_cache_numshardbits;
     options.max_compaction_bytes = FLAGS_max_compaction_bytes;
     options.disable_auto_compactions = FLAGS_disable_auto_compactions;
+    options.auto_tuned_compactions = FLAGS_auto_tuned_compactions;
     options.optimize_filters_for_hits = FLAGS_optimize_filters_for_hits;
 
     // fill storage options
@@ -3284,6 +3336,9 @@ void VerifyDBFromDB(std::string& truth_db_name) {
       FLAGS_env->LowerThreadPoolIOPriority(Env::HIGH);
     }
     options.env = FLAGS_env;
+    if (FLAGS_write_rate_sine) {
+      FLAGS_benchmark_write_rate_limit = 50000000;
+    }
 
     if (FLAGS_rate_limiter_bytes_per_sec > 0) {
       if (FLAGS_rate_limit_bg_reads &&
@@ -3298,7 +3353,7 @@ void VerifyDBFromDB(std::string& truth_db_name) {
           10 /* fairness */,
           FLAGS_rate_limit_bg_reads ? RateLimiter::Mode::kReadsOnly
                                     : RateLimiter::Mode::kWritesOnly,
-          FLAGS_rate_limiter_auto_tuned));
+          FLAGS_rate_limiter_auto_tuned, FLAGS_auto_tuned_compactions));
     }
 
     if (FLAGS_num_multi_db <= 1) {
@@ -3520,6 +3575,10 @@ void VerifyDBFromDB(std::string& truth_db_name) {
     }
   }
 
+  double SineRate(double x) {
+    return FLAGS_sine_a*sin((FLAGS_sine_b*x) + FLAGS_sine_c) + FLAGS_sine_d;
+  }
+
   void DoWrite(ThreadState* thread, WriteMode write_mode) {
     const int test_duration = write_mode == RANDOM ? FLAGS_duration : 0;
     const int64_t num_ops = writes_ == 0 ? num_ : writes_;
@@ -3665,6 +3724,31 @@ void VerifyDBFromDB(std::string& truth_db_name) {
       }
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db,
                                 entries_per_batch_, kWrite);
+
+      uint64_t now = FLAGS_env->NowMicros();
+      int64_t usecs_since_start = now - thread->stats.GetStart();
+      if (FLAGS_write_rate_sine) {
+        int64_t usecs_since_last = now - thread->stats.GetSineInterval();
+        bool sine_finished = thread->stats.GetSineFinished();
+
+        if (!sine_finished && FLAGS_sine_finished_seconds > 0 &&
+            usecs_since_start > (FLAGS_sine_finished_seconds * 1000000)) {
+          std::cout << "Sine finished\n";
+          thread->stats.SetSineFinished();
+          thread->shared->write_rate_limiter.reset(
+                  NewGenericRateLimiter(FLAGS_sine_finished_write_rate_limit));
+        }
+        else if (!sine_finished &&
+            usecs_since_last > (FLAGS_sine_write_rate_interval_milliseconds * uint64_t{1000})) {
+          thread->stats.ResetSineInterval();
+          uint64_t write_rate = static_cast<uint64_t>(
+                  SineRate(static_cast<double>(usecs_since_start) / 1000000.0)
+          );
+          std::cout << "\nNew write rate\t" + std::to_string(write_rate) + "\n";
+          thread->shared->write_rate_limiter.reset(
+                  NewGenericRateLimiter(write_rate));
+        }
+      }
       if (!s.ok()) {
         fprintf(stderr, "put error: %s\n", s.ToString().c_str());
         exit(1);

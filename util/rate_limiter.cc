@@ -13,6 +13,9 @@
 #include "rocksdb/env.h"
 #include "util/aligned_buffer.h"
 #include "util/sync_point.h"
+#include <iostream>
+#include "rocksdb/db.h"
+#include "db/column_family.h"
 
 namespace rocksdb {
 
@@ -46,10 +49,10 @@ struct GenericRateLimiter::Req {
 GenericRateLimiter::GenericRateLimiter(int64_t rate_bytes_per_sec,
                                        int64_t refill_period_us,
                                        int32_t fairness, RateLimiter::Mode mode,
-                                       Env* env, bool auto_tuned)
+                                       Env* env, bool auto_tuned, bool auto_tuned_compactions)
     : RateLimiter(mode),
       refill_period_us_(refill_period_us),
-      rate_bytes_per_sec_(auto_tuned ? rate_bytes_per_sec / 2
+      rate_bytes_per_sec_((auto_tuned || auto_tuned_compactions) ? rate_bytes_per_sec / 2
                                      : rate_bytes_per_sec),
       refill_bytes_per_period_(
           CalculateRefillBytesPerPeriod(rate_bytes_per_sec_)),
@@ -63,7 +66,12 @@ GenericRateLimiter::GenericRateLimiter(int64_t rate_bytes_per_sec,
       rnd_((uint32_t)time(nullptr)),
       leader_(nullptr),
       auto_tuned_(auto_tuned),
+      auto_tuned_compactions_(auto_tuned_compactions),
+      num_low_drains_(0),
+      num_high_drains_(0),
       num_drains_(0),
+      prev_num_low_drains_(0),
+      prev_num_high_drains_(0),
       prev_num_drains_(0),
       max_bytes_per_sec_(rate_bytes_per_sec),
       tuned_time_(NowMicrosMonotonic(env_)) {
@@ -106,12 +114,17 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
                            &rate_bytes_per_sec_);
   MutexLock g(&request_mutex_);
 
-  if (auto_tuned_) {
+  if (auto_tuned_ || auto_tuned_compactions_) {
     static const int kRefillsPerTune = 100;
     std::chrono::microseconds now(NowMicrosMonotonic(env_));
     if (now - tuned_time_ >=
         kRefillsPerTune * std::chrono::microseconds(refill_period_us_)) {
-      Tune();
+      if (auto_tuned_) {
+        Tune();
+      }
+      if (auto_tuned_compactions_) {
+        TuneCompaction(stats);
+      }
     }
   }
 
@@ -142,11 +155,10 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
     //     to lower priority
     // (3) a previous waiter at the front of queue, who got notified by
     //     previous leader
-    if (leader_ == nullptr &&
-        ((!queue_[Env::IO_HIGH].empty() &&
-            &r == queue_[Env::IO_HIGH].front()) ||
-         (!queue_[Env::IO_LOW].empty() &&
-            &r == queue_[Env::IO_LOW].front()))) {
+    bool leader_isnull = leader_ == nullptr;
+    bool io_high = leader_isnull ? (!queue_[Env::IO_HIGH].empty() && &r == queue_[Env::IO_HIGH].front()) : false;
+    bool io_low = !io_high ? (!queue_[Env::IO_LOW].empty() && &r == queue_[Env::IO_LOW].front()) : false;
+      if (leader_isnull && (io_high || io_low)) {
       leader_ = &r;
       int64_t delta = next_refill_us_ - NowMicrosMonotonic(env_);
       delta = delta > 0 ? delta : 0;
@@ -154,8 +166,15 @@ void GenericRateLimiter::Request(int64_t bytes, const Env::IOPriority pri,
         timedout = true;
       } else {
         int64_t wait_until = env_->NowMicros() + delta;
+        if (io_high) {
+          ++num_high_drains_;
+          RecordTick(stats, NUMBER_RATE_LIMITER_HIGH_PRI_DRAINS);
+        } else if (io_low) {
+          ++num_low_drains_;
+          RecordTick(stats, NUMBER_RATE_LIMITER_LOW_PRI_DRAINS);
+        }
+        num_drains_ = num_high_drains_ + num_low_drains_;
         RecordTick(stats, NUMBER_RATE_LIMITER_DRAINS);
-        ++num_drains_;
         timedout = r.cv.TimedWait(wait_until);
       }
     } else {
@@ -324,16 +343,61 @@ Status GenericRateLimiter::Tune() {
   return Status::OK();
 }
 
+Status GenericRateLimiter::TuneCompaction(Statistics* stats) {
+  const int kLowWatermarkPct = 50;
+  const int kHighWatermarkPct = 90;
+
+  std::chrono::microseconds prev_tuned_time = tuned_time_;
+  tuned_time_ = std::chrono::microseconds(NowMicrosMonotonic(env_));
+
+  int64_t elapsed_intervals = (tuned_time_ - prev_tuned_time +
+                               std::chrono::microseconds(refill_period_us_) -
+                               std::chrono::microseconds(1)) /
+                              std::chrono::microseconds(refill_period_us_);
+  // We tune every kRefillsPerTune intervals, so the overflow and division-by-
+  // zero conditions should never happen.
+  assert(num_drains_ - prev_num_drains_ <= port::kMaxInt64 / 100);
+  assert(elapsed_intervals > 0);
+  int64_t drained_high_pct =
+          (num_high_drains_ - prev_num_high_drains_) * 100 / elapsed_intervals;
+  int64_t drained_low_pct =
+          (num_low_drains_ - prev_num_low_drains_) * 100 / elapsed_intervals;
+  int64_t drained_pct = drained_high_pct + drained_low_pct;
+
+  std::cout << "\nTUNECOMPACT\n";
+  std::cout << std::to_string(drained_pct) + " - " + std::to_string(drained_high_pct) + " - " + std::to_string(drained_low_pct);
+  if (drained_pct == 0) {
+    // Nothing
+  } else if (drained_pct <= kHighWatermarkPct && drained_high_pct < kLowWatermarkPct) {
+    // sanitize to prevent overflow
+    // ENABLE AND TRIGGER COMPACTION
+    std::cout << "\nENABLE COMPACTIONS\n";
+    env_->EnableCompactions();
+
+  } else if (drained_pct >= kHighWatermarkPct && drained_high_pct >= kLowWatermarkPct) {
+    // DISABLE
+    std::cout << "\nDISABLE COMPACTION\n";
+    env_->DisableCompactions();
+    RecordTick(stats, COMPACTION_DISABLED_COUNT, 1);
+    // sanitize to prevent overflow
+  }
+  num_low_drains_ = prev_num_low_drains_;
+  num_high_drains_ = prev_num_high_drains_;
+  num_drains_ = prev_num_drains_;
+  return Status::OK();
+}
+
 RateLimiter* NewGenericRateLimiter(
     int64_t rate_bytes_per_sec, int64_t refill_period_us /* = 100 * 1000 */,
     int32_t fairness /* = 10 */,
     RateLimiter::Mode mode /* = RateLimiter::Mode::kWritesOnly */,
-    bool auto_tuned /* = false */) {
-  assert(rate_bytes_per_sec > 0);
+    bool auto_tuned /* = false */,
+    bool auto_tuned_compactions /* =false */) {
+    assert(rate_bytes_per_sec > 0);
   assert(refill_period_us > 0);
   assert(fairness > 0);
   return new GenericRateLimiter(rate_bytes_per_sec, refill_period_us, fairness,
-                                mode, Env::Default(), auto_tuned);
+                                mode, Env::Default(), auto_tuned, auto_tuned_compactions);
 }
 
 }  // namespace rocksdb
